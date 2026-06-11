@@ -7,18 +7,18 @@ import requests
 from datetime import datetime, timezone
 from dataclasses import dataclass, field, asdict
 from typing import Optional
-
+# test
 log = logging.getLogger("cti_scorer")
 
 
-ENFORCE_THRESHOLD    = 0.58
-TTL_INBOUND_SECONDS  = 72 * 3600    # 72 h
+ENFORCE_THRESHOLD = 0.58
+TTL_INBOUND_SECONDS = 72 * 3600    # 72 h
 TTL_OUTBOUND_SECONDS = 24 * 3600    # 24 h
-REQUEST_TIMEOUT      = 10
+REQUEST_TIMEOUT = 10
 
 ABUSECH_API_KEY = "7743f521c1d27db1a329fb6555c15947580ea8ec94d4b822"
 
-ML_MODEL_DIR   = "/home/sakila/Desktop/Codes/models/models"
+ML_MODEL_DIR = "/home/sakila/Desktop/Codes/models/models"
 ML_FEATURE_FILE = "/home/sakila/Desktop/Codes/models/data/data/feature_columns.json"
 
 REQUEST_HEADERS = {"User-Agent": "SOHO-CTI-Engine/1.0"}
@@ -48,16 +48,15 @@ CATEGORY_WEIGHTS = {
 _IP_RE = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
 
 
-
 @dataclass
 class APIRecord:
-    found:      bool          = False
-    source:     str           = ""
-    tags:       list          = field(default_factory=list)
+    found:      bool = False
+    source:     str = ""
+    tags:       list = field(default_factory=list)
     first_seen: Optional[str] = None
     last_seen:  Optional[str] = None
-    confidence: float         = 0.0    
-    raw:        dict          = field(default_factory=dict)
+    confidence: float = 0.0
+    raw:        dict = field(default_factory=dict)
 
 
 @dataclass
@@ -65,39 +64,39 @@ class ScoringComponents:
     category_weight:     float = 0.0
     corroboration_score: float = 0.0
     freshness_score:     float = 0.0
-    rule_score:          float = 0.0    
+    rule_score:          float = 0.0
 
-    ml_score:            float = 0.0   
-    ml_used:             bool  = False
-    ml_confidence:       str   = ""     
-    ml_model_agreement:  float = 0.0   
+    ml_score:            float = 0.0
+    ml_used:             bool = False
+    ml_confidence:       str = ""
+    ml_model_agreement:  float = 0.0
 
 
 @dataclass
 class CTIResult:
-    value:          str               = ""
-    ioc_type:       str               = ""       
+    value:          str = ""
+    ioc_type:       str = ""
 
-    urlhaus_record: APIRecord         = field(default_factory=APIRecord)
-    abusech_record: APIRecord         = field(default_factory=APIRecord)
-    feeds_found:    int               = 0
-    combined_tags:  list              = field(default_factory=list)
-    first_seen:     Optional[str]     = None
-    age_days:       float             = 9999.0
+    urlhaus_record: APIRecord = field(default_factory=APIRecord)
+    abusech_record: APIRecord = field(default_factory=APIRecord)
+    feeds_found:    int = 0
+    combined_tags:  list = field(default_factory=list)
+    first_seen:     Optional[str] = None
+    age_days:       float = 9999.0
 
-    components:     ScoringComponents = field(default_factory=ScoringComponents)
+    components:     ScoringComponents = field(
+        default_factory=ScoringComponents)
 
-    ml_details:     dict              = field(default_factory=dict)
+    ml_details:     dict = field(default_factory=dict)
 
-    final_score:    float             = 0.0
-    decision:       str               = "DISCARD"
-    threshold:      float             = ENFORCE_THRESHOLD
-    ttl_seconds:    int               = 0
-    ipset_target:   str               = ""
+    final_score:    float = 0.0
+    decision:       str = "DISCARD"
+    threshold:      float = ENFORCE_THRESHOLD
+    ttl_seconds:    int = 0
+    ipset_target:   str = ""
 
-    score_source:   str               = ""  
-    error:          Optional[str]     = None
-
+    score_source:   str = ""
+    error:          Optional[str] = None
 
 
 def _category_weight(tags: list) -> tuple[float, str]:
@@ -116,9 +115,12 @@ def _corroboration_score(feeds_found: int) -> float:
     1 feed    → 0.6
     0 feeds   → 0.0  (triggers ML fallback)
     """
-    if feeds_found >= 4: return 1.0
-    if feeds_found >= 2: return 0.8
-    if feeds_found == 1: return 0.6
+    if feeds_found >= 4:
+        return 1.0
+    if feeds_found >= 2:
+        return 0.8
+    if feeds_found == 1:
+        return 0.6
     return 0.0
 
 
@@ -131,7 +133,7 @@ def _freshness_score(first_seen_str: Optional[str]) -> tuple[float, float]:
     Returns (score, age_days).
     """
     if not first_seen_str:
-        return 0.5, 9999.0     
+        return 0.5, 9999.0
 
     try:
         s = first_seen_str.strip()
@@ -157,12 +159,15 @@ def _freshness_score(first_seen_str: Optional[str]) -> tuple[float, float]:
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
 
-        delta    = datetime.now(timezone.utc) - dt
+        delta = datetime.now(timezone.utc) - dt
         age_days = delta.total_seconds() / 86400
 
-        if age_days < 7:  return 1.0, age_days
-        if age_days < 30: return 0.7, age_days
-        if age_days < 90: return 0.5, age_days
+        if age_days < 7:
+            return 1.0, age_days
+        if age_days < 30:
+            return 0.7, age_days
+        if age_days < 90:
+            return 0.5, age_days
         return 0.1, age_days
 
     except Exception:
@@ -174,19 +179,18 @@ def _compute_rule_score(
     feeds_found: int,
     first_seen: Optional[str],
 ) -> tuple[ScoringComponents, float]:
-    cat_w, _          = _category_weight(tags)
-    corr_s            = _corroboration_score(feeds_found)
+    cat_w, _ = _category_weight(tags)
+    corr_s = _corroboration_score(feeds_found)
     fresh_s, age_days = _freshness_score(first_seen)
-    rule_score        = round(cat_w * corr_s * fresh_s, 4)
+    rule_score = round(cat_w * corr_s * fresh_s, 4)
 
     comp = ScoringComponents(
-        category_weight     = cat_w,
-        corroboration_score = corr_s,
-        freshness_score     = fresh_s,
-        rule_score          = rule_score+0.5,
+        category_weight=cat_w,
+        corroboration_score=corr_s,
+        freshness_score=fresh_s,
+        rule_score=rule_score+0.5,
     )
     return comp, age_days
-
 
 
 def _normalise(value: str) -> tuple[str, str]:
@@ -198,16 +202,15 @@ def _normalise(value: str) -> tuple[str, str]:
     return v, ioc_type
 
 
-
 def _query_urlhaus(value: str, ioc_type: str) -> APIRecord:
-    
+
     record = APIRecord(source="urlhaus")
     try:
         resp = requests.post(
             "https://urlhaus-api.abuse.ch/v1/host/",
-            data    = {"host": value},
-            headers = URLHAUS_HEADERS,      
-            timeout = REQUEST_TIMEOUT,
+            data={"host": value},
+            headers=URLHAUS_HEADERS,
+            timeout=REQUEST_TIMEOUT,
         )
         resp.raise_for_status()
         body = resp.json()
@@ -215,7 +218,8 @@ def _query_urlhaus(value: str, ioc_type: str) -> APIRecord:
         status = body.get("query_status", "")
 
         if status == "unauthorized":
-            log.error("[URLhaus] Auth-Key rejected — check ABUSECH_API_KEY constant.")
+            log.error(
+                "[URLhaus] Auth-Key rejected — check ABUSECH_API_KEY constant.")
             record.found = False
             return record
 
@@ -224,7 +228,8 @@ def _query_urlhaus(value: str, ioc_type: str) -> APIRecord:
             return record
 
         if status != "is_host":
-            log.warning(f"[URLhaus] Unexpected query_status '{status}' for {value}")
+            log.warning(
+                f"[URLhaus] Unexpected query_status '{status}' for {value}")
             record.found = False
             return record
 
@@ -234,7 +239,7 @@ def _query_urlhaus(value: str, ioc_type: str) -> APIRecord:
             return record
 
         record.found = True
-        record.raw   = body
+        record.raw = body
 
         tags, dates = set(), []
         for entry in urls:
@@ -246,9 +251,9 @@ def _query_urlhaus(value: str, ioc_type: str) -> APIRecord:
             if sig:
                 tags.add(sig.lower())
 
-        record.tags       = sorted(tags)
+        record.tags = sorted(tags)
         record.first_seen = min(dates) if dates else None
-        record.last_seen  = max(dates) if dates else None
+        record.last_seen = max(dates) if dates else None
         record.confidence = min(len(urls) / 10.0, 1.0)
 
     except requests.exceptions.Timeout:
@@ -262,14 +267,14 @@ def _query_urlhaus(value: str, ioc_type: str) -> APIRecord:
 
 
 def _query_threatfox(value: str) -> APIRecord:
-    
+
     record = APIRecord(source="abuse.ch/threatfox")
     try:
         resp = requests.post(
             "https://threatfox-api.abuse.ch/api/v1/",
-            json    = {"query": "search_ioc", "search_term": value},
-            headers = THREATFOX_HEADERS,   
-            timeout = REQUEST_TIMEOUT,
+            json={"query": "search_ioc", "search_term": value},
+            headers=THREATFOX_HEADERS,
+            timeout=REQUEST_TIMEOUT,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -281,7 +286,8 @@ def _query_threatfox(value: str) -> APIRecord:
             return record
 
         if status == "unauthorized":
-            log.error("[ThreatFox] Auth-Key rejected — check ABUSECH_API_KEY constant.")
+            log.error(
+                "[ThreatFox] Auth-Key rejected — check ABUSECH_API_KEY constant.")
             record.found = False
             return record
 
@@ -291,7 +297,8 @@ def _query_threatfox(value: str) -> APIRecord:
             return record
 
         if status != "ok":
-            log.warning(f"[ThreatFox] Unexpected query_status '{status}' for {value}")
+            log.warning(
+                f"[ThreatFox] Unexpected query_status '{status}' for {value}")
             record.found = False
             return record
 
@@ -301,12 +308,12 @@ def _query_threatfox(value: str) -> APIRecord:
             return record
 
         record.found = True
-        record.raw   = data
+        record.raw = data
 
         tags, dates, confidences = set(), [], []
         for ioc in iocs:
             threat_type = (ioc.get("threat_type") or "").lower()
-            malware     = (ioc.get("malware")     or "").lower()
+            malware = (ioc.get("malware") or "").lower()
             if threat_type:
                 tags.add(threat_type)
             if malware:
@@ -326,9 +333,9 @@ def _query_threatfox(value: str) -> APIRecord:
             if cl is not None:
                 confidences.append(int(cl) / 100.0)
 
-        record.tags       = sorted(t for t in tags if t)
+        record.tags = sorted(t for t in tags if t)
         record.first_seen = min(dates) if dates else None
-        record.last_seen  = max(dates) if dates else None
+        record.last_seen = max(dates) if dates else None
         record.confidence = min(
             sum(confidences) / len(confidences) if confidences else 0.5,
             1.0,
@@ -344,15 +351,14 @@ def _query_threatfox(value: str) -> APIRecord:
     return record
 
 
-
 def _query_feodo_ip(ip: str) -> APIRecord:
-    
+
     record = APIRecord(source="abuse.ch/feodo")
     try:
         resp = requests.get(
             "https://feodotracker.abuse.ch/downloads/ipblocklist.json",
-            headers = REQUEST_HEADERS,
-            timeout = REQUEST_TIMEOUT,
+            headers=REQUEST_HEADERS,
+            timeout=REQUEST_TIMEOUT,
         )
         resp.raise_for_status()
         entries = resp.json()
@@ -360,12 +366,12 @@ def _query_feodo_ip(ip: str) -> APIRecord:
         for entry in entries:
             if entry.get("ip_address", "").strip() == ip:
                 malware = (entry.get("malware") or "unknown").lower()
-                record.found      = True
-                record.tags       = ["botnet", "c2", malware]
+                record.found = True
+                record.tags = ["botnet", "c2", malware]
                 record.first_seen = entry.get("first_seen")
-                record.last_seen  = entry.get("last_online")
-                record.confidence = 0.95   
-                record.raw        = entry
+                record.last_seen = entry.get("last_online")
+                record.confidence = 0.95
+                record.raw = entry
                 break
 
     except requests.exceptions.Timeout:
@@ -376,9 +382,8 @@ def _query_feodo_ip(ip: str) -> APIRecord:
     return record
 
 
-
 def _query_abusech(value: str, ioc_type: str) -> APIRecord:
-    
+
     if ioc_type == "ip":
         tf_record = _query_threatfox(value)
         if tf_record.found:
@@ -389,24 +394,23 @@ def _query_abusech(value: str, ioc_type: str) -> APIRecord:
         return _query_threatfox(value)
 
 
-
 _ml_model = None
 
 
 def _get_ml_model():
-    
+
     global _ml_model
     if _ml_model is None:
         try:
             from predictor import URLPredictor
             _ml_model = URLPredictor(
-                model_dir    = ML_MODEL_DIR,
-                feature_file = ML_FEATURE_FILE,
+                model_dir=ML_MODEL_DIR,
+                feature_file=ML_FEATURE_FILE,
             )
             log.info("[ML] URLPredictor loaded for fallback.")
         except Exception as e:
             log.warning(f"[ML] Could not load URLPredictor: {e}")
-            _ml_model = False  
+            _ml_model = False
     return _ml_model if _ml_model else None
 
 
@@ -416,20 +420,18 @@ def _ml_fallback(value: str, ioc_type: str) -> tuple[float, str, dict]:
         return 0.0, "ml_unavailable", {}
 
     try:
-        result   = model.predict(value, return_details=True)
-        ml_score = float(result.get("probability", 0.0))  
+        result = model.predict(value, return_details=True)
+        ml_score = float(result.get("probability", 0.0))
         return round(ml_score, 4), "url_predictor", result
     except Exception as e:
         log.warning(f"[ML fallback] Error scoring {value}: {e}")
         return 0.0, f"ml_error: {e}", {}
 
 
-
-
 def score(value: str) -> CTIResult:
-    
-    result          = CTIResult()
-    result.value    = value
+
+    result = CTIResult()
+    result.value = value
     clean, ioc_type = _normalise(value)
     result.ioc_type = ioc_type
 
@@ -441,21 +443,21 @@ def score(value: str) -> CTIResult:
     result.urlhaus_record = urlhaus_rec
     result.abusech_record = abusech_rec
 
-    feeds_found        = sum([urlhaus_rec.found, abusech_rec.found])
+    feeds_found = sum([urlhaus_rec.found, abusech_rec.found])
     result.feeds_found = feeds_found
 
-    all_tags             = list(set(urlhaus_rec.tags + abusech_rec.tags))
+    all_tags = list(set(urlhaus_rec.tags + abusech_rec.tags))
     result.combined_tags = all_tags
 
-    dates             = [d for d in [urlhaus_rec.first_seen, abusech_rec.first_seen] if d]
-    first_seen        = min(dates) if dates else None
+    dates = [d for d in [urlhaus_rec.first_seen, abusech_rec.first_seen] if d]
+    first_seen = min(dates) if dates else None
     result.first_seen = first_seen
 
     if feeds_found > 0:
-        comp, age_days      = _compute_rule_score(all_tags, feeds_found, first_seen)
-        result.age_days     = age_days
-        result.components   = comp
-        result.final_score  = comp.rule_score
+        comp, age_days = _compute_rule_score(all_tags, feeds_found, first_seen)
+        result.age_days = age_days
+        result.components = comp
+        result.final_score = comp.rule_score
         result.score_source = "api"
 
     else:
@@ -464,46 +466,45 @@ def score(value: str) -> CTIResult:
         ml_score, ml_source, ml_detail = _ml_fallback(clean, ioc_type)
 
         comp = ScoringComponents(
-            ml_score           = ml_score,
-            ml_used            = True,
-            ml_confidence      = ml_detail.get("confidence", ""),      
-            ml_model_agreement = ml_detail.get("model_agreement", 0.0), 
+            ml_score=ml_score,
+            ml_used=True,
+            ml_confidence=ml_detail.get("confidence", ""),
+            ml_model_agreement=ml_detail.get("model_agreement", 0.0),
         )
 
-        result.age_days     = 9999.0
-        result.components   = comp
-        result.ml_details   = ml_detail              
-        result.final_score  = ml_score
+        result.age_days = 9999.0
+        result.components = comp
+        result.ml_details = ml_detail
+        result.final_score = ml_score
         result.score_source = f"ml_fallback ({ml_source})"
 
     result.final_score = round(result.final_score, 4)
-    result.threshold   = ENFORCE_THRESHOLD
+    result.threshold = ENFORCE_THRESHOLD
 
     if result.final_score >= ENFORCE_THRESHOLD:
-        result.decision     = "ENFORCE"
+        result.decision = "ENFORCE"
         result.ipset_target = "CTI_BLOCK_INBOUND"
-        result.ttl_seconds  = TTL_INBOUND_SECONDS
+        result.ttl_seconds = TTL_INBOUND_SECONDS
     else:
-        result.decision     = "DISCARD"
+        result.decision = "DISCARD"
         result.ipset_target = ""
-        result.ttl_seconds  = 0
+        result.ttl_seconds = 0
 
     return result
 
 
-
 def _fmt_plain(r: CTIResult) -> str:
-    RESET  = "\033[0m"
-    BOLD   = "\033[1m"
-    RED    = "\033[91m"
-    GREEN  = "\033[92m"
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
+    RED = "\033[91m"
+    GREEN = "\033[92m"
     YELLOW = "\033[93m"
-    CYAN   = "\033[96m"
-    DIM    = "\033[2m"
+    CYAN = "\033[96m"
+    DIM = "\033[2m"
 
-    dec_color   = RED    if r.decision    == "ENFORCE" else GREEN
-    score_color = RED    if r.final_score >= 0.6       else \
-                  YELLOW if r.final_score >= 0.4       else GREEN
+    dec_color = RED if r.decision == "ENFORCE" else GREEN
+    score_color = RED if r.final_score >= 0.6 else \
+        YELLOW if r.final_score >= 0.4 else GREEN
 
     lines = [
         "",
@@ -520,14 +521,15 @@ def _fmt_plain(r: CTIResult) -> str:
         f"  Feeds Found  : {r.feeds_found}",
         f"  Combined Tags: {', '.join(r.combined_tags) if r.combined_tags else '—'}",
         f"  First Seen   : {r.first_seen or 'unknown'}",
-        f"  Age          : {f'{r.age_days:.1f} days' if r.age_days < 9000 else 'unknown'}",
+        f"  Age          : {f'{r.age_days:.1f} days' if r.age_days <
+                            9000 else 'unknown'}",
         "",
         f"  {BOLD}Scoring Components{RESET}  ({r.score_source})",
     ]
 
     if r.components.ml_used:
         conf_color = (
-            RED    if r.components.ml_confidence == "HIGH"   else
+            RED if r.components.ml_confidence == "HIGH" else
             YELLOW if r.components.ml_confidence == "MEDIUM" else
             GREEN
         )
@@ -549,9 +551,9 @@ def _fmt_plain(r: CTIResult) -> str:
             lines.append(f"  {DIM}Per-model scores:{RESET}")
             for mname, mscore in sorted(model_scores.items(),
                                         key=lambda x: -x[1]):
-                bar_fill  = int(mscore * 20)
-                bar       = "█" * bar_fill + "░" * (20 - bar_fill)
-                m_color   = RED if mscore >= 0.6 else YELLOW if mscore >= 0.4 else GREEN
+                bar_fill = int(mscore * 20)
+                bar = "█" * bar_fill + "░" * (20 - bar_fill)
+                m_color = RED if mscore >= 0.6 else YELLOW if mscore >= 0.4 else GREEN
                 lines.append(
                     f"    {mname:<20} {m_color}{mscore:.4f}{RESET}  "
                     f"{DIM}[{bar}]{RESET}"
@@ -563,7 +565,8 @@ def _fmt_plain(r: CTIResult) -> str:
             f"  Corroboration: {r.components.corroboration_score:.2f}  "
             f"{DIM}({r.feeds_found} feed{'s' if r.feeds_found != 1 else ''}){RESET}",
             f"  Freshness    : {r.components.freshness_score:.2f}  "
-            f"{DIM}(age: {f'{r.age_days:.1f}d' if r.age_days < 9000 else 'unknown'}){RESET}",
+            f"{DIM}(age: {f'{r.age_days:.1f}d' if r.age_days <
+                          9000 else 'unknown'}){RESET}",
             f"  Rule Score   : {r.components.category_weight:.2f} × "
             f"{r.components.corroboration_score:.2f} × "
             f"{r.components.freshness_score:.2f} = "
@@ -589,7 +592,7 @@ def _fmt_plain(r: CTIResult) -> str:
 
 
 def _fmt_verbose(r: CTIResult) -> str:
-    base   = _fmt_plain(r)
+    base = _fmt_plain(r)
     extras = []
 
     if r.urlhaus_record.found and r.urlhaus_record.raw:
@@ -599,7 +602,7 @@ def _fmt_verbose(r: CTIResult) -> str:
 
     if r.abusech_record.found and r.abusech_record.raw:
         extras.append("\n  [Abuse.ch Raw]")
-        raw        = r.abusech_record.raw
+        raw = r.abusech_record.raw
         data_items = raw.get("data", [raw])
         if isinstance(data_items, list) and data_items:
             for k, v in list(data_items[0].items())[:8]:
@@ -638,7 +641,7 @@ def _fmt_json(r: CTIResult) -> str:
             "rule_score":          r.components.rule_score,
             "ml_score":            r.components.ml_score,
             "ml_used":             r.components.ml_used,
-            "ml_confidence":       r.components.ml_confidence,     
+            "ml_confidence":       r.components.ml_confidence,
             "ml_model_agreement":  r.components.ml_model_agreement,
         },
         "urlhaus": {
@@ -660,7 +663,6 @@ def _fmt_json(r: CTIResult) -> str:
         "ml_details": r.ml_details if r.components.ml_used else {},
     }
     return json.dumps(out, indent=2)
-
 
 
 def build_parser():
@@ -687,13 +689,19 @@ Score formula:
   ≥ 0.6 → ENFORCE (add to ipset)   < 0.6 → DISCARD
         """,
     )
-    p.add_argument("value",       nargs="?",           help="IP, domain, or URL to score")
+    p.add_argument("value",       nargs="?",
+                   help="IP, domain, or URL to score")
     p.add_argument("--json",      action="store_true", help="Output as JSON")
-    p.add_argument("--verbose",   action="store_true", help="Show raw API + ML detail")
-    p.add_argument("--batch",     metavar="FILE",      help="Score each line of a file")
-    p.add_argument("--stdin",     action="store_true", help="Read values from stdin (one per line)")
-    p.add_argument("--no-color",  action="store_true", help="Disable ANSI colour codes")
-    p.add_argument("--quiet",     action="store_true", help="Only print score and decision")
+    p.add_argument("--verbose",   action="store_true",
+                   help="Show raw API + ML detail")
+    p.add_argument("--batch",     metavar="FILE",
+                   help="Score each line of a file")
+    p.add_argument("--stdin",     action="store_true",
+                   help="Read values from stdin (one per line)")
+    p.add_argument("--no-color",  action="store_true",
+                   help="Disable ANSI colour codes")
+    p.add_argument("--quiet",     action="store_true",
+                   help="Only print score and decision")
     p.add_argument("--threshold", type=float, default=ENFORCE_THRESHOLD,
                    help=f"Override enforce threshold (default: {ENFORCE_THRESHOLD})")
     p.add_argument("--log-level", default="WARNING",
@@ -713,7 +721,7 @@ def _score_and_print(value: str, args) -> CTIResult:
         return r
 
     formatted = (
-        _fmt_json(r)    if args.json    else
+        _fmt_json(r) if args.json else
         _fmt_verbose(r) if args.verbose else
         _fmt_plain(r)
     )
@@ -727,11 +735,11 @@ def _score_and_print(value: str, args) -> CTIResult:
 
 def main():
     parser = build_parser()
-    args   = parser.parse_args()
+    args = parser.parse_args()
 
     logging.basicConfig(
-        level  = getattr(logging, args.log_level),
-        format = "%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+        level=getattr(logging, args.log_level),
+        format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
     )
 
     if args.batch:
